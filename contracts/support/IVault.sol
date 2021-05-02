@@ -23,4 +23,10 @@ interface IVault {
      */ 
     function getDepositsHeld() external returns (address [] memory  _stakeAddress, address [] memory source, address [] memory erc20Contract, uint256  []  memory _amount, uint256 []  memory _depositDate);   
     
+    /**
+     * returns the number of active deposits held in the account
+     */ 
+    function getDepositCount() external returns (uint256 _numberOfActiveDeposits);
+    
+    
 }
