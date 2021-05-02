@@ -22,8 +22,16 @@ contract Stake is IStake {
     bool isSSD; 
     
     constructor(address _stakeAdministrator,
-       address _owner, address _holder, uint256 _amount, string memory _currencyName, address _erc20ContractAddress, 
-         string memory _ruleSetName, address _ruleSetAddress, string memory _details, string memory _status){
+                address _owner, 
+                address _holder, 
+                uint256 _amount, 
+                string memory _currencyName, 
+                address _erc20ContractAddress, 
+                string memory _ruleSetName, 
+                address _ruleSetAddress, 
+                string memory _details, 
+                string memory _status, 
+                address _originalStakeDataAddress){
              
         stakeAdministrator = _stakeAdministrator;
         owner = _owner; 
@@ -35,6 +43,7 @@ contract Stake is IStake {
         ruleSetAddress = _ruleSetAddress;
         details = _details; 
         status = _status; 
+        originalStakeDataAddress = _originalStakeDataAddress; 
     }
     function getOwner() override external view returns (address _stakeOwner){
         return owner; 
