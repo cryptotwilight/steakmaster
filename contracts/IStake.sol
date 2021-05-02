@@ -1,4 +1,4 @@
-// "SPDX-License-Identifier: UNLINCENSED"
+// "SPDX-License-Identifier: UNLICENSED"
 pragma solidity >0.7.0 <0.9.0;
 /**
  * The stake interface represents the stake that will be posted by the provider and either released or slashed by the client 
