@@ -10,7 +10,8 @@ import "./dependency/IERC20.sol";
 
 
 contract StakeMaster is IStakeMaster { 
-    
+
+
     mapping(address=>IStake[]) stakeByStakeOwnerAddress; 
     
     mapping(address=>IStake[]) stakeByStakeHolderAddress; 
@@ -23,11 +24,17 @@ contract StakeMaster is IStakeMaster {
     
     mapping(address=>IStake) originalStakeDataByStakeAddress; 
     
-    mapping(address=>address) registeredStakeAddressByoriginalStakeAddress; 
+    mapping(address=>address) registeredStakeAddressByOriginalStakeAddress; 
     
     mapping(address=>address[]) registeredStakeAddressesByOwner;
     
-    mapping(address=>address[]) registeredStakeAddressesByHolder; 
+    mapping(address=>address[]) registeredStakeAddressesByHolder;
+    
+    mapping(address=>address) stakeAccountByOwner; 
+    
+    mapping(address=>bool) stakeAccountStatusByOwner; 
+    
+    mapping(address=>mapping(string=>uint256)) walletMetricsByCategoryByAddress; 
 
     address administratorAddress; 
     address vaultAddress; 
@@ -36,6 +43,9 @@ contract StakeMaster is IStakeMaster {
     uint256 postedStakeCount; 
     uint256 releasedStakeCount; 
     uint256 activeStakeCount; 
+    
+    address [] registeredStakeAddressList; 
+    
 
     constructor(address _administratorAddress, 
                 address _vaultAddress){
@@ -75,12 +85,18 @@ contract StakeMaster is IStakeMaster {
             vault.deposit{value : stakeAmount}(clonedStakeAddress);
         }
         
+        // check the details of the stake are aligned 
+        verifyStakeInternal(clonedStakeAddress);  
         
         // register the stake
         registerStake(clonedStakeAddress);
+       
+        registeredStakeAddressList.push(clonedStakeAddress);
         
-        // check the details of the stake are aligned 
-        this.verifyStake(clonedStakeAddress);   
+        walletMetricsByCategoryByAddress[clonedStake.getOwner()]["tvl"] += clonedStake.getAmount();
+        walletMetricsByCategoryByAddress[clonedStake.getHolder()]["tvl"] += clonedStake.getAmount();
+        walletMetricsByCategoryByAddress[clonedStake.getOwner()]["svp"] += clonedStake.getAmount();
+        walletMetricsByCategoryByAddress[clonedStake.getHolder()]["svh"] += clonedStake.getAmount();
         
         postedStakeCount++; 
         activeStakeCount++;
@@ -92,28 +108,30 @@ contract StakeMaster is IStakeMaster {
         return stakeRegistrationStatusByStakeAddress[_stakeAddress];
     }
     
+    function verifyStakeInternal(address _stakeAddress) internal returns (bool _valid) {
+        IStake stake  = IStake(_stakeAddress);
+        
+        // check the start date is before the end date
+        require (stake.getStartDate() < stake.getEndDate(), 'vsi 01 - start date before end date');
+        
+        // check the start date has been passed
+        require(stake.getStartDate() < block.timestamp, 'vsi 02 - start date has not been reached');
+        
+        // check the end date has not been passed
+        require(stake.getEndDate () > block.timestamp, 'vsi 03 - end date has been passed');
+        return true; 
+    }
+    
     function verifyStake(address _stakeAddress) override external returns (bool _valid){ 
         
         // check the stake is registered
         require(this.isRegistered(_stakeAddress), "vs 00 - stake not registered");
         
-        IStake stake  = IStake(_stakeAddress);
-        
-        // check the start date is before the end date
-        require (stake.getStartDate() < stake.getEndDate(), 'vs 01 - start date before end date');
-        
-        // check the start date has been passed
-        require(stake.getStartDate() < block.timestamp, 'vs 02 - start date has not been reached');
-        
-        // check the end date has not been passed
-        require(stake.getEndDate () > block.timestamp, 'vs 03 - end date has been passed');
-        
-        
-        return true;
+        return verifyStakeInternal(_stakeAddress);
     }
     
     function getRegisteredStakeAddress(address _unregisteredStakeAddress) override external view returns (address _registeredStakeAddress) {
-        return registeredStakeAddressByoriginalStakeAddress[_unregisteredStakeAddress];
+        return registeredStakeAddressByOriginalStakeAddress[_unregisteredStakeAddress];
     }
     
     function getStakesHeld(address _holder) override external view returns (address [] memory _stakesHeld){
@@ -124,6 +142,12 @@ contract StakeMaster is IStakeMaster {
         return registeredStakeAddressesByOwner[_owner];
     }
     
+
+    
+    
+    function getRegisteredStakeList() override external view returns (address [] memory registeredStakes) {
+        return registeredStakeAddressList; 
+    }
     
     function releaseStake(address _stakeAddress) override external returns (string memory _releaseStatus){
         require(!stakeReleaseStatusByStakeAddress[_stakeAddress], ' rs 00 - stake already released ');
@@ -145,11 +169,35 @@ contract StakeMaster is IStakeMaster {
         
         stakeReleaseStatusByStakeAddress[_stakeAddress] = true; 
         
+        
+        walletMetricsByCategoryByAddress[oStake.getOwner()]["tvl"] -= oStake.getAmount();
+        walletMetricsByCategoryByAddress[oStake.getHolder()]["tvl"] -= oStake.getAmount();
+        walletMetricsByCategoryByAddress[oStake.getOwner()]["svp"] -= oStake.getAmount();
+        walletMetricsByCategoryByAddress[oStake.getHolder()]["svh"] -= oStake.getAmount();
+        walletMetricsByCategoryByAddress[oStake.getHolder()]["svrl"] += oStake.getAmount();
+        walletMetricsByCategoryByAddress[oStake.getOwner()]["svrt"] += oStake.getAmount();
+        
+        
         releasedStakeCount++;
         activeStakeCount--;
         
         return releaseStatus; 
     }
+ 
+ 
+    function getWalletValues() override external view returns (uint256 _totalValueLocked, uint256 _stakeValuePosted, uint256 _stakeValueHeld,  
+                                                                uint256 _stakeValueSlashed, uint256 _stakeValueContested, uint256 _stakeValueReleased, 
+                                                                uint256 _stakeValueReturned){
+        uint256 tvl = walletMetricsByCategoryByAddress[msg.sender]["tvl"];
+        uint256 svp = walletMetricsByCategoryByAddress[msg.sender]["svp"];
+        uint256 svh = walletMetricsByCategoryByAddress[msg.sender]["svh"];
+        uint256 svs = walletMetricsByCategoryByAddress[msg.sender]["svs"];
+        uint256 svc = walletMetricsByCategoryByAddress[msg.sender]["svc"];
+        uint256 svrl = walletMetricsByCategoryByAddress[msg.sender]["svrl"];
+        uint256 svrt = walletMetricsByCategoryByAddress[msg.sender]["svrt"];
+        return (tvl, svp, svh, svs, svc, svrl, svrt);
+    }
+
  
 
     function getActiveStakeCount() override external view returns (uint256 _activeStakeCount){
@@ -192,21 +240,21 @@ contract StakeMaster is IStakeMaster {
     }
     
     function registerStake(address _stakeAddress) internal returns (bool _registered) {
-            Stake stake = Stake(_stakeAddress);
-            stakeByStakeOwnerAddress[stake.getOwner()].push(stake); 
-            stakeByStakeHolderAddress[stake.getHolder()].push(stake);
-            stakeByStakeAddress[_stakeAddress] = stake; 
-            
-            registeredStakeAddressesByOwner[stake.getOwner()];
-    
-            registeredStakeAddressesByHolder[stake.getHolder()]; 
-            
-            registeredStakeAddressByoriginalStakeAddress[stake.getOriginalStakeDataAddress()] = _stakeAddress;
-            
-            IStake osd = IStake(stake.getOriginalStakeDataAddress());
-            originalStakeDataByStakeAddress[_stakeAddress] = osd; 
-            stakeRegistrationStatusByStakeAddress[_stakeAddress] = true; 
-            return true; 
+        Stake stake = Stake(_stakeAddress);
+        stakeByStakeOwnerAddress[stake.getOwner()].push(stake); 
+        stakeByStakeHolderAddress[stake.getHolder()].push(stake);
+        stakeByStakeAddress[_stakeAddress] = stake; 
+        
+        registeredStakeAddressesByOwner[stake.getOwner()].push(_stakeAddress);
+
+        registeredStakeAddressesByHolder[stake.getHolder()].push(_stakeAddress); 
+        
+        registeredStakeAddressByOriginalStakeAddress[stake.getOriginalStakeDataAddress()] = _stakeAddress;
+        
+        IStake osd = IStake(stake.getOriginalStakeDataAddress());
+        originalStakeDataByStakeAddress[_stakeAddress] = osd; 
+        stakeRegistrationStatusByStakeAddress[_stakeAddress] = true; 
+        return true; 
     }
     
     function clone(address _originalStakeAddress) internal returns (address _clonedStake) {
@@ -216,7 +264,7 @@ contract StakeMaster is IStakeMaster {
                                 originalStake.getHolder(), originalStake.getAmount(), 
                                 originalStake.getCurrencyName(), originalStake.getCurrencyContractAddress(), 
                                 originalStake.getRuleSetName(), originalStake.getRuleSetAddress(), 
-                                originalStake.getDetails(), originalStake.getStakeStatus());
+                                originalStake.getDetails(), originalStake.getStakeStatus(), _originalStakeAddress);
         stake.setStartDate( originalStake.getStartDate());
         stake.setEndDate( originalStake.getEndDate());
         return address(stake);
