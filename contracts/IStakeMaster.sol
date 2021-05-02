@@ -27,14 +27,14 @@ interface IStakeMaster {
     function getRegisteredStakeAddress(address _unregisteredStakeAddress) external returns (address _registeredStakeAddress);
     
     /**
-     * get stakes held by the _holder
+     * get stakes held by the presented holder address
      */
     function getStakesHeld(address _holder) external view returns (address [] memory _stakesHeld);
     
     /**
-     * get stakes owned by the owner
+     * get stakes owned by the owner address
      */
-    function getStakesOwned(address _owner) external view returns (address [] memory stakesOwned);
+    function getStakesOwned(address _owner) external view returns (address [] memory _stakesOwned);
     
     /**
      * get the number of posted stakes
@@ -50,6 +50,17 @@ interface IStakeMaster {
      * get the number of active stakes
      */ 
     function getActiveStakeCount() external returns (uint256 _activeStakeCount);
+    
+    /**
+     * returns the metrics for the wallet 
+     */ 
+    function getWalletValues() external returns (uint256 _totalValueLocked, uint256 _stakeValuePosted, uint256 _stakeValueHeld, uint256 _stakeValueSlashed, uint256 _stakeValueContested, uint256 _stakeValueReleased, 
+                                                                uint256 _stakeValueReturned);
+    
+    /** 
+     * get complete list of registered stakes 
+     */ 
+    function getRegisteredStakeList() external view returns (address [] memory registeredStakes);
     
     /**
      * get slash Fee returns the cost to slash the stake 
