@@ -1,4 +1,4 @@
-// "SPDX-License-Identifier: UNLINCENSED"
+// "SPDX-License-Identifier: UNLICENSED"
 pragma solidity >=0.7.0 <0.9.0;
 pragma experimental ABIEncoderV2; 
 
@@ -16,17 +16,26 @@ contract Vault is IVault {
         uint256 depositDate; 
     }
     
+    uint256 depositCount; 
+    address stakeMasterAddress; 
+    address vaultAdministrator; 
     mapping(address=>Deposit) depositByStakeAddress; 
     address [] stakeAddresses; 
     mapping(address=>bool) depositedStatusByStakeAddress; 
     mapping(address=>bool) withdrawnStatusByStakeAddress; 
+    
+    constructor(address _administrator) {
+        vaultAdministrator = _administrator; 
+    }
+    
     
     /**
      * depostis the funds for the stake into the vault
      * A stake can only be deposited once and withdrawn once i.e. a stake can not be reused 
      */
     function deposit(address _stakeAddress) override external payable returns (bool _recorded){
-        require(!depositedStatusByStakeAddress[_stakeAddress], "d 00 - already deposited ");
+        require(msg.sender == stakeMasterAddress, 'd 00 - stake master only ');
+        require(!depositedStatusByStakeAddress[_stakeAddress], "d 01 - already deposited ");
         IStake stake = IStake(_stakeAddress);
         address _erc20ContractAddress = stake.getCurrencyContractAddress(); 
         
@@ -37,11 +46,11 @@ contract Vault is IVault {
             // approve the spend
             IERC20 ierc20 = IERC20(_erc20ContractAddress);
             
-            // transfer teh funds into the vault
-            ierc20.transferFrom(_source, address(this), _amount); 
+            // transfer the funds into the vault
+            ierc20.transferFrom(stakeMasterAddress, address(this), _amount); 
         }
         else {
-            require(msg.value >= _amount, "d 01 insufficient ETH deposit");
+            require(msg.value >= _amount, "d 02 insufficient ETH/Chain Token deposit");
         }
         Deposit memory l_deposit = Deposit({ stakeAddress : _stakeAddress,
                                     source : _source,
@@ -52,20 +61,22 @@ contract Vault is IVault {
         depositByStakeAddress[_stakeAddress] = l_deposit; 
         depositedStatusByStakeAddress[_stakeAddress] = true; 
         stakeAddresses.push(_stakeAddress);
+        depositCount++;
         return true;
     }
     /**
      * withdraws the funds for the stake from the vault
      */
     function withdraw( address _stakeAddress, address _destination) override external returns (uint256 _withdrawnAmount){
-        require(withdrawnStatusByStakeAddress[_stakeAddress] == false, 'w 00 - stake already withdrawn');
+        require(msg.sender == stakeMasterAddress, 'w 00 - stake master only ');
+        require(withdrawnStatusByStakeAddress[_stakeAddress] == false, 'w 01 - stake already withdrawn');
         // set the status to withdrawn to prevent reentry
         withdrawnStatusByStakeAddress[_stakeAddress] = true; 
         
         Deposit memory d = depositByStakeAddress[_stakeAddress];
         IERC20 ierc20 = IERC20(d.erc20Contract);
         ierc20.transfer(_destination, d.amount); 
-        
+        depositCount--;
         return d.amount; 
     }
     
@@ -101,5 +112,16 @@ contract Vault is IVault {
         return (sAddresses, sources, erc20s, amounts, depositDates);
     }
     
+    
+    function getDepositCount() override external view returns (uint256 _numberOfActiveDeposits){
+        return depositCount; 
+    }
+    
+    
+    function setStakeMasterAddress(address _stakeMasterAddress) external returns (bool _set) {
+        require(msg.sender == vaultAdministrator, 'ssma 00 - administrator only');
+        stakeMasterAddress = _stakeMasterAddress; 
+        return true; 
+    }
     
 }
